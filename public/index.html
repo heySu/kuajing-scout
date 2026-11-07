@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>跨境选品侦察兵 · kuajing-scout</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --panel2: #1c2330; --line: #2a3140;
+    --text: #e6edf3; --dim: #8b949e; --green: #3fb950; --amber: #d29922;
+    --red: #f85149; --blue: #58a6ff; --accent: #2ea043;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font: 14px/1.6 "Segoe UI", "Microsoft YaHei", sans-serif; }
+  header { display: flex; align-items: center; gap: 14px; padding: 16px 28px; border-bottom: 1px solid var(--line); }
+  header .logo { width: 36px; height: 36px; border-radius: 9px; background: linear-gradient(135deg, #2ea043, #1a7f37); display: grid; place-items: center; font-weight: 700; font-size: 17px; }
+  header h1 { font-size: 17px; }
+  header .sub { color: var(--dim); font-size: 12px; }
+  header .spacer { flex: 1; }
+  button.btn { background: var(--accent); color: #fff; border: 0; border-radius: 8px; padding: 9px 18px; font-size: 13px; cursor: pointer; font-weight: 600; }
+  button.btn:hover { filter: brightness(1.1); }
+  button.btn[disabled] { opacity: .5; cursor: wait; }
+  main { max-width: 1280px; margin: 0 auto; padding: 24px 28px 60px; }
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 22px; }
+  .kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+  .kpi .label { color: var(--dim); font-size: 12px; }
+  .kpi .val { font-size: 26px; font-weight: 700; margin-top: 4px; }
+  .kpi .hint { font-size: 12px; color: var(--dim); }
+  .layout { display: grid; grid-template-columns: 1fr 380px; gap: 18px; align-items: start; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .card h2 { font-size: 14px; padding: 14px 18px; border-bottom: 1px solid var(--line); color: var(--dim); font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; color: var(--dim); font-weight: 500; padding: 10px 12px; border-bottom: 1px solid var(--line); font-size: 12px; white-space: nowrap; }
+  td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  tr:last-child td { border-bottom: 0; }
+  tr:hover td { background: var(--panel2); }
+  .score { font-weight: 700; font-size: 15px; }
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600; }
+  .pill.hot { background: rgba(63,185,80,.15); color: var(--green); }
+  .pill.warm { background: rgba(210,153,34,.15); color: var(--amber); }
+  .pill.cold { background: rgba(248,81,73,.15); color: var(--red); }
+  .pill.scene-temu { background: rgba(88,166,255,.13); color: var(--blue); }
+  .pill.scene-tiktok { background: rgba(188,140,255,.15); color: #bc8cff; }
+  .bar { position: relative; height: 6px; border-radius: 4px; background: var(--line); min-width: 70px; }
+  .bar i { position: absolute; inset: 0 auto 0 0; border-radius: 4px; }
+  .report-body { padding: 16px 20px; }
+  .report-body h1 { font-size: 17px; margin-bottom: 10px; }
+  .report-body h2 { font-size: 14px; margin: 14px 0 6px; border: 0; padding: 0; color: var(--text); }
+  .report-body p, .report-body li { color: #c9d1d9; font-size: 13px; }
+  .report-body ul { padding-left: 20px; }
+  .report-meta { color: var(--dim); font-size: 12px; padding: 10px 20px; border-bottom: 1px solid var(--line); }
+  .empty { color: var(--dim); text-align: center; padding: 40px 0; font-size: 13px; }
+  .toast { position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%); background: var(--panel2); border: 1px solid var(--line); padding: 10px 22px; border-radius: 10px; font-size: 13px; display: none; }
+  @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } .kpis { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">侦</div>
+  <div>
+    <h1>跨境选品侦察兵</h1>
+    <div class="sub">商品池热度评分 · 利润测算 · LLM 选品日报</div>
+  </div>
+  <div class="spacer"></div>
+  <button class="btn" id="genBtn">生成今日日报</button>
+</header>
+
+<main>
+  <div class="kpis" id="kpis"></div>
+  <div class="layout">
+    <div class="card">
+      <h2>商品池 · 综合评分榜</h2>
+      <table>
+        <thead><tr>
+          <th>商品</th><th>渠道</th><th>综合分</th><th>毛利率</th><th>单件净利</th><th>趋势</th><th>竞争</th><th>结论</th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h2>今日选品日报</h2>
+      <div class="report-meta" id="reportMeta">尚未生成</div>
+      <div class="report-body" id="reportBody"><div class="empty">点右上角「生成今日日报」<br>配置 LLM_API_KEY 后由大模型撰写<br>未配置时由规则引擎生成</div></div>
+    </div>
+  </div>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 2600);
+}
+function pillClass(v) { return v >= 75 ? 'hot' : v >= 60 ? 'warm' : 'cold'; }
+function bar(v, color) { return `<div class="bar"><i style="width:${Math.max(2, Math.min(100, v))}%;background:${color}"></i></div>`; }
+
+function miniMd(md) {
+  let html = esc(md)
+    .replace(/^### (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/^&gt; (.+)$/gm, '<p style="color:#8b949e;font-size:12px">$1</p>');
+  return html.split(/\n{2,}/).map(block => {
+    if (/^<(h\d|p)/.test(block.trim())) return block;
+    const items = block.split('\n').filter(l => l.trim());
+    if (items.every(l => l.trim().startsWith('-'))) return '<ul>' + items.map(l => '<li>' + l.trim().slice(1) + '</li>').join('') + '</ul>';
+    return '<p>' + block.replace(/\n/g, '<br>') + '</p>';
+  }).join('');
+}
+
+async function loadProducts() {
+  const { products } = await (await fetch('/api/products')).json();
+  const sorted = [...products].sort((a, b) => b.scout_score - a.scout_score);
+  const avgMargin = (products.reduce((s, p) => s + p.margin_pct, 0) / products.length).toFixed(1);
+  const hot = products.filter(p => p.trend_score >= 80).length;
+  const best = sorted[0];
+
+  $('#kpis').innerHTML = `
+    <div class="kpi"><div class="label">商品池</div><div class="val">${products.length}</div><div class="hint">在监控商品总数</div></div>
+    <div class="kpi"><div class="label">平均毛利率</div><div class="val">${avgMargin}<span style="font-size:14px">%</span></div><div class="hint">按当前核价与扣点估算</div></div>
+    <div class="kpi"><div class="label">高热商品（趋势≥80）</div><div class="val">${hot}</div><div class="hint">趋势分满分 100</div></div>
+    <div class="kpi"><div class="label">今日首推</div><div class="val" style="font-size:17px;padding-top:6px">${esc(best.name)}</div><div class="hint">综合分 ${best.scout_score} · ${esc(best.verdict)}</div></div>`;
+
+  $('#rows').innerHTML = sorted.map(p => `
+    <tr>
+      <td><strong>${esc(p.name)}</strong><br><span style="color:var(--dim);font-size:11.5px">${esc(p.category)} · 1688 ¥${p.cost_1688} → 售价 $${p.sale_usd}</span></td>
+      <td><span class="pill scene-${p.scene}">${p.scene === 'temu' ? 'Temu' : 'TikTok'}</span></td>
+      <td><span class="score" style="color:${p.scout_score >= 75 ? 'var(--green)' : p.scout_score >= 60 ? 'var(--amber)' : 'var(--red)'}">${p.scout_score}</span></td>
+      <td>${p.margin_pct}%</td>
+      <td>$${p.profit_usd}</td>
+      <td>${bar(p.trend_score, '#3fb950')}</td>
+      <td>${bar(p.competition, p.competition >= 75 ? '#f85149' : '#d29922')}</td>
+      <td><span class="pill ${pillClass(p.scout_score)}">${esc(p.verdict)}</span></td>
+    </tr>`).join('');
+}
+
+async function loadTodayReport() {
+  const d = new Date().toISOString().slice(0, 10);
+  const r = await fetch('/api/reports/' + d);
+  if (!r.ok) return;
+  const { report } = await r.json();
+  renderReport(report);
+}
+
+function renderReport(report) {
+  $('#reportMeta').innerHTML = `${report.day} · ${report.source === 'llm' ? 'LLM 生成（' + esc(report.model) + '）' : '规则引擎生成'}`;
+  $('#reportBody').innerHTML = miniMd(report.content);
+}
+
+$('#genBtn').addEventListener('click', async e => {
+  const btn = e.currentTarget;
+  btn.disabled = true; btn.textContent = '生成中…';
+  try {
+    const r = await fetch('/api/report/generate', { method: 'POST' });
+    const { report } = await r.json();
+    renderReport(report);
+    toast('日报已生成，存档 reports/daily-' + report.day + '.md');
+  } catch (err) { toast('生成失败：' + err.message); }
+  btn.disabled = false; btn.textContent = '生成今日日报';
+});
+
+loadProducts().catch(e => toast('加载失败: ' + e.message));
+loadTodayReport();
+</script>
+</body>
+</html>
