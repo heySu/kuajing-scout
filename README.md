@@ -47,7 +47,7 @@ cp .env.example .env
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"   # 写入 SESSION_SECRET
 
 # 2) 创建管理员（或设置 BOOTSTRAP_ADMIN_EMAIL / PASSWORD 后首次启动自动创建）
-npm run create-user -- --email you@example.com --password "StrongPass123"
+npm run create-user -- --email you@example.com --password "REPLACE_WITH_A_STRONG_PASSWORD"
 
 # 3) 启动
 npm start            # http://127.0.0.1:3600/
@@ -119,9 +119,11 @@ docker build -t kuajing-scout .
 docker run -d --name scout -p 3600:3600 \
   -e SESSION_SECRET="$(openssl rand -hex 32)" \
   -e BOOTSTRAP_ADMIN_EMAIL=you@example.com \
-  -e BOOTSTRAP_ADMIN_PASSWORD='StrongPass123' \
+  -e BOOTSTRAP_ADMIN_PASSWORD='REPLACE_WITH_A_STRONG_PASSWORD' \
   -v scout-data:/app/data kuajing-scout
 ```
+
+示例中的密码仅为占位符，部署时必须替换为你自己生成的强密码（例如 `openssl rand -base64 24`），切勿沿用文档里的任何字符串。
 
 Nginx、systemd、备份恢复、监控与升级步骤见 [docs/DEPLOY.md](docs/DEPLOY.md)。
 

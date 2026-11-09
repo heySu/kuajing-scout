@@ -11,7 +11,7 @@ Base URL：`http(s)://<host>:<port>/api`
 # 1. 登录，服务端下发 HttpOnly Cookie: ks_sid
 curl -i -c jar.txt -X POST http://127.0.0.1:3600/api/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"email":"you@example.com","password":"StrongPass123"}'
+  -d '{"email":"you@example.com","password":"REPLACE_WITH_A_STRONG_PASSWORD"}'
 
 # 2. 取 CSRF Token（响应中的 csrf）
 curl -b jar.txt http://127.0.0.1:3600/api/auth/me

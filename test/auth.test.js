@@ -11,11 +11,11 @@ const { hashPassword, verifyPassword } = require('../server/lib/crypto');
 initSchema();
 
 test('密码散列与校验（scrypt，含盐）', async () => {
-  const hash = await hashPassword('StrongPass123');
+  const hash = await hashPassword('REPLACE_WITH_A_STRONG_PASSWORD');
   assert.match(hash, /^scrypt\$16384\$8\$1\$/);
-  assert.equal(await verifyPassword('StrongPass123', hash), true);
+  assert.equal(await verifyPassword('REPLACE_WITH_A_STRONG_PASSWORD', hash), true);
   assert.equal(await verifyPassword('wrong-pass', hash), false);
-  assert.equal(await verifyPassword('StrongPass123', 'garbage'), false);
+  assert.equal(await verifyPassword('REPLACE_WITH_A_STRONG_PASSWORD', 'garbage'), false);
   await assert.rejects(hashPassword('short'), /password_too_short/);
 });
 

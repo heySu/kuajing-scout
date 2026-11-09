@@ -1,7 +1,7 @@
 'use strict';
 /**
  * 创建/重置管理员账号（无交互，适合部署脚本）：
- *   node server/cli/create-user.js --email a@b.com --password 'StrongPass123' [--name 张三] [--role owner] [--tenant default]
+ *   node server/cli/create-user.js --email a@b.com --password 'REPLACE_WITH_A_STRONG_PASSWORD' [--name 张三] [--role owner] [--tenant default]
  */
 const { initSchema } = require('../db');
 const { db, close } = require('../db');
@@ -22,7 +22,7 @@ async function main() {
   const role = arg('role', 'owner');
   const slug = arg('tenant', 'default');
   if (!email || !password) {
-    console.error('用法: node server/cli/create-user.js --email you@example.com --password "StrongPass123" [--role owner]');
+    console.error('用法: node server/cli/create-user.js --email you@example.com --password "REPLACE_WITH_A_STRONG_PASSWORD" [--role owner]');
     process.exit(1);
   }
   if (!['owner', 'admin', 'analyst', 'viewer'].includes(role)) {
