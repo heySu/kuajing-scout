@@ -1,15 +1,19 @@
 {
   "name": "kuajing-scout",
-  "version": "0.1.0",
+  "version": "1.1.0",
   "private": true,
   "type": "commonjs",
-  "description": "跨境选品侦察兵 · 商品池热度评分 + LLM 选品日报 Agent",
+  "description": "跨境选品侦察兵 · 利润测算 + 可解释评分 + 选品日报 Agent（商用版）",
+  "license": "MIT",
   "engines": {
     "node": ">=22.5.0"
   },
   "scripts": {
-    "start": "node --experimental-sqlite --no-warnings server/index.js",
-    "dev": "node --experimental-sqlite --no-warnings --watch server/index.js",
-    "report": "node --experimental-sqlite --no-warnings server/agent.js --once"
+    "start": "node --experimental-sqlite --disable-warning=ExperimentalWarning server/index.js",
+    "dev": "node --experimental-sqlite --disable-warning=ExperimentalWarning --watch server/index.js",
+    "test": "node --test \"test/*.test.js\"",
+    "report": "node server/cli/report.js",
+    "backup": "node server/cli/backup.js",
+    "create-user": "node server/cli/create-user.js"
   }
 }

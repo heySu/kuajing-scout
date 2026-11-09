@@ -1,138 +1,142 @@
 'use strict';
-/** HTTP 服务：静态托管 + JSON API。node:http，零依赖。 */
-const http = require('node:http');
-const path = require('node:path');
-const fs = require('node:fs');
-const { seedIfEmpty } = require('./db');
-const agent = require('./agent');
+/**
+ * 启动入口：配置校验 → 数据库迁移 → 租户/账号初始化 → 路由注册 → 定时任务 → 优雅退出。
+ */
+const { config, warnings, errors } = require('./config');
 
-seedIfEmpty();
-
-const PORT = Number(process.env.PORT || 3600);
-const PUBLIC_DIR = path.join(__dirname, '..', 'public');
-
-const MIME = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon'
-};
-
-function json(res, code, data) {
-  const body = JSON.stringify(data);
-  res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' });
-  res.end(body);
+if (errors.length) {
+  console.error('\n启动失败，请修正以下配置：');
+  for (const e of errors) console.error('  ✗ ' + e);
+  console.error('\n参考 .env.example 或 docs/DEPLOY.md\n');
+  process.exit(1);
 }
 
-function readBody(req) {
-  return new Promise((resolve, reject) => {
-    let raw = '';
-    req.on('data', c => { raw += c; if (raw.length > 1e6) req.destroy(); });
-    req.on('end', () => {
-      if (!raw) return resolve({});
-      try { resolve(JSON.parse(raw)); } catch { reject(new Error('bad_json')); }
+const { db, initSchema, close } = require('./db');
+const { createServer, route } = require('./app');
+const log = require('./lib/logger');
+const { today, timeInZone } = require('./lib/time');
+const auth = require('./services/auth');
+const { seedProducts } = require('./seed');
+const agent = require('./services/agent');
+const { recordSnapshots } = require('./services/snapshots');
+
+for (const w of warnings) console.warn('[config] ' + w);
+
+initSchema();
+
+// 注册路由（顺序有意义：静态路径先于 :id）
+require('./api/ops')(route);
+require('./api/auth')(route);
+require('./api/products')(route);
+require('./api/reports')(route);
+require('./api/alerts')(route);
+require('./api/settings')(route);
+
+const server = createServer();
+
+function activeTenants() {
+  return db.prepare("SELECT id FROM tenants WHERE status = 'active'").all();
+}
+
+async function bootstrap() {
+  const boot = await auth.ensureBootstrap();
+  const shouldSeed = !config.isProd || config.demoMode || process.env.IMPORT_ON_BOOT === '1';
+  if (shouldSeed) {
+    const seeded = seedProducts(boot.tenant.id);
+    if (seeded.created) log.info('已写入演示商品池', seeded);
+    if (!config.isProd || config.demoMode) {
+      const r = await agent.ensureInitialReport(boot.tenant.id);
+      if (r.created) log.info('已生成示例日报', r);
+    }
+  }
+  if (!config.isProd || config.demoMode) {
+    for (const t of activeTenants()) {
+      try { recordSnapshots(t.id, today(), 'boot'); } catch (e) { log.warn('启动快照失败', { error: e.message }); }
+    }
+  }
+  return boot;
+}
+
+let lastReportDay = null;
+let lastSnapshotAt = Date.now();
+
+async function tick() {
+  if (!config.enableCron) return;
+  const t = timeInZone();
+  const day = today();
+  const { hour, minute } = config.reportCron;
+  const inWindow = t.hour === hour && t.minute >= minute && t.minute < minute + 5;
+  if (inWindow && lastReportDay !== day) {
+    lastReportDay = day;
+    for (const tenant of activeTenants()) {
+      try {
+        const r = await agent.generateReport({
+          tenantId: tenant.id, day, useLLM: true, writeFile: true, sendNotify: true,
+          actor: { userId: null, ip: 'cron' }
+        });
+        log.info('定时日报完成', { tenantId: tenant.id, source: r.report.source, alerts: r.alerts.length, fallback: r.fallbackReason || null });
+      } catch (e) {
+        log.error('定时日报失败', { tenantId: tenant.id, error: e.message });
+      }
+    }
+  }
+  if (Date.now() - lastSnapshotAt >= config.snapshotIntervalHours * 3600_000) {
+    lastSnapshotAt = Date.now();
+    for (const tenant of activeTenants()) {
+      try { recordSnapshots(tenant.id, day, 'cron'); } catch (e) { log.warn('快照失败', { error: e.message }); }
+    }
+  }
+}
+
+async function main() {
+  const boot = await bootstrap();
+  auth.cleanupSessions();
+
+  server.listen(config.port, config.host, () => {
+    log.info('服务已启动', {
+      addr: `http://${config.host}:${config.port}`,
+      env: config.env,
+      timezone: config.timezone,
+      llm: config.llm.apiKey ? config.llm.model : '未配置（规则引擎）',
+      demoMode: config.demoMode
     });
-    req.on('error', reject);
+    console.log('');
+    console.log('  跨境选品侦察兵 · kuajing-scout v' + config.version);
+    console.log(`  面板    http://${config.host}:${config.port}/`);
+    console.log(`  健康    http://${config.host}:${config.port}/api/health`);
+    console.log(`  时区    ${config.timezone}（日报按该时区切天）`);
+    console.log(`  AI 日报 ${config.llm.apiKey ? '已启用 · ' + config.llm.model : '未配置 LLM_API_KEY，走规则引擎'}`);
+    if (boot.demoCredentials) {
+      console.log(`  演示账号 ${boot.demoCredentials.email} / ${boot.demoCredentials.password}`);
+    }
+    console.log('');
+  });
+
+  const timer = setInterval(() => { tick().catch((e) => log.error('cron tick failed', { error: e.message })); }, 60_000);
+  timer.unref();
+  lastSnapshotAt = Date.now();
+
+  const shutdown = async (signal) => {
+    console.log(`\n[${signal}] 正在关闭…`);
+    clearInterval(timer);
+    server.close(async () => {
+      try { close(); } catch { /* ignore */ }
+      process.exit(0);
+    });
+    setTimeout(() => process.exit(1), 8000).unref();
+  };
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('unhandledRejection', (e) => log.error('unhandledRejection', { error: e?.message, stack: e?.stack }));
+  process.on('uncaughtException', (e) => {
+    log.error('uncaughtException', { error: e?.message, stack: e?.stack });
+    shutdown('uncaughtException');
   });
 }
 
-/** 极简路由：method + 精确路径 */
-const routes = [];
-function route(method, pattern, handler) { routes.push({ method, pattern, handler }); }
-
-route('GET', '/api/products', () => ({ products: agent.listProducts() }));
-route('GET', '/api/top', (ctx) => ({ top: agent.topProducts(Number(ctx.query.get('n') || 3)) }));
-route('GET', '/api/trend', (ctx) => {
-  const id = Number(ctx.query.get('id'));
-  if (!id) throw new HttpError(400, 'need_id');
-  return { series: agent.trendSeries(id) };
-});
-route('GET', '/api/reports', () => ({ reports: agent.listReports() }));
-route('GET', '/api/reports/:day', (ctx) => {
-  const r = agent.getReport(ctx.params.day);
-  if (!r) throw new HttpError(404, 'not_found', '当天无日报');
-  return { report: r };
-});
-route('POST', '/api/report/generate', async () => {
-  agent.recordSnapshot();
-  const r = await agent.generateReport();
-  return { report: r };
-});
-route('PATCH', '/api/products/:id', async (ctx) => {
-  const id = Number(ctx.params.id);
-  const body = ctx.body || {};
-  const fields = ['trend_score', 'competition', 'repurchase', 'differentiation', 'sale_usd', 'cost_1688'];
-  const sets = [], vals = [];
-  for (const f of fields) {
-    if (body[f] !== undefined && Number.isFinite(Number(body[f]))) {
-      sets.push(`${f} = ?`); vals.push(Number(body[f]));
-    }
-  }
-  if (!sets.length) throw new HttpError(400, 'nothing_to_update');
-  sets.push('updated_at = ?'); vals.push(new Date().toISOString()); vals.push(id);
-  ctx.db.prepare(`UPDATE products SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
-  return { ok: true };
+main().catch((e) => {
+  log.error('启动失败', { error: e.message, stack: e.stack });
+  process.exit(1);
 });
 
-class HttpError extends Error {
-  constructor(status, code, message) { super(message || code); this.status = status; this.code = code; }
-}
-
-const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url, 'http://localhost');
-
-  if (url.pathname.startsWith('/api/')) {
-    try {
-      const match = findRoute(req.method, url.pathname);
-      if (!match) return json(res, 404, { error: 'not_found' });
-      const body = req.method === 'POST' || req.method === 'PATCH' ? await readBody(req) : {};
-      const data = await match.handler({ req, res, query: url.searchParams, params: match.params, body, db: require('./db').db });
-      return json(res, 200, data);
-    } catch (e) {
-      const status = e instanceof HttpError ? e.status : 500;
-      if (status >= 500) console.error('[api]', e);
-      return json(res, status, { error: e.code || 'internal', message: e.message });
-    }
-  }
-
-  // 静态文件
-  let file = url.pathname === '/' ? '/index.html' : decodeURIComponent(url.pathname);
-  const abs = path.normalize(path.join(PUBLIC_DIR, file));
-  if (!abs.startsWith(PUBLIC_DIR)) { res.writeHead(403); return res.end(); }
-  fs.readFile(abs, (err, buf) => {
-    if (err) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('404'); }
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(abs)] || 'application/octet-stream' });
-    res.end(buf);
-  });
-});
-
-function findRoute(method, pathname) {
-  for (const r of routes) {
-    if (r.method !== method) continue;
-    const pp = r.pattern.split('/').filter(Boolean);
-    const up = pathname.split('/').filter(Boolean);
-    if (pp.length !== up.length) continue;
-    const params = {};
-    let ok = true;
-    for (let i = 0; i < pp.length; i++) {
-      if (pp[i].startsWith(':')) params[pp[i].slice(1)] = up[i];
-      else if (pp[i] !== up[i]) { ok = false; break; }
-    }
-    if (ok) return { handler: r.handler, params };
-  }
-  return null;
-}
-
-// 定时任务：每 6 小时记录一次热度快照
-setInterval(() => {
-  try { agent.recordSnapshot(); console.log('[cron] snapshot recorded'); }
-  catch (e) { console.error('[cron]', e.message); }
-}, 6 * 3600 * 1000).unref();
-
-server.listen(PORT, '127.0.0.1', () => {
-  console.log('跨境选品侦察兵 kuajing-scout');
-  console.log(`  面板   http://127.0.0.1:${PORT}/`);
-  console.log(`  API    http://127.0.0.1:${PORT}/api/products`);
-  console.log(`  LLM    ${process.env.LLM_API_KEY ? '已配置 (' + (process.env.LLM_MODEL || 'gpt-4o-mini') + ')' : '未配置 · 日报走规则引擎（设 LLM_API_KEY 即启用）'}`);
-});
+module.exports = { server };

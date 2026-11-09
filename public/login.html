@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0d1117">
+<title>登录 · 跨境选品侦察兵</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/css/app.css">
+</head>
+<body class="auth-page">
+<main class="auth-wrap">
+  <section class="auth-card" aria-labelledby="loginTitle">
+    <div class="brand brand-lg">
+      <span class="brand-mark" aria-hidden="true">侦</span>
+      <span class="brand-text"><strong>跨境选品侦察兵</strong><small>kuajing-scout · 选品决策系统</small></span>
+    </div>
+
+    <h1 id="loginTitle">登录工作台</h1>
+    <p class="muted">用企业邮箱登录。数据按租户隔离，成员权限可分级。</p>
+
+    <form id="loginForm" novalidate>
+      <label class="field">
+        <span>邮箱</span>
+        <input id="email" name="email" type="email" autocomplete="username" placeholder="you@company.com" required>
+      </label>
+      <label class="field">
+        <span>密码</span>
+        <input id="password" name="password" type="password" autocomplete="current-password" placeholder="至少 10 位" required>
+      </label>
+      <p class="form-error" id="loginError" role="alert" hidden></p>
+      <button class="btn btn-primary btn-block" type="submit" id="loginBtn">登录</button>
+    </form>
+
+    <div class="auth-divider" id="demoDivider" hidden><span>或</span></div>
+    <button class="btn btn-ghost btn-block" id="demoBtn" type="button" hidden>进入在线演示（只读）</button>
+
+    <p class="auth-foot muted">
+      没有账号？联系管理员开通。
+      <span id="version"></span>
+    </p>
+  </section>
+
+  <aside class="auth-aside" aria-hidden="true">
+    <h2>把选品从「感觉」变成「可复算的决策」</h2>
+    <ul>
+      <li><strong>利润先算清</strong>：拿货、头程、关税、佣金、投流、退货逐项拆解，给出保本价与可承受成本。</li>
+      <li><strong>评分可解释</strong>：趋势、利润、差异化、复购四项贡献透明，竞争与合规扣分可见。</li>
+      <li><strong>日报能执行</strong>：每天一份主推 + 风险 + 明日动作，规则引擎兜底，LLM 可选。</li>
+      <li><strong>风险早暴露</strong>：亏损定价、合规高危、热度下滑自动预警并推送企微/飞书。</li>
+    </ul>
+  </aside>
+</main>
+<script src="/js/login.js" defer></script>
+</body>
+</html>

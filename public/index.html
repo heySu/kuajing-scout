@@ -3,168 +3,191 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>跨境选品侦察兵 · kuajing-scout</title>
-<style>
-  :root {
-    --bg: #0d1117; --panel: #161b22; --panel2: #1c2330; --line: #2a3140;
-    --text: #e6edf3; --dim: #8b949e; --green: #3fb950; --amber: #d29922;
-    --red: #f85149; --blue: #58a6ff; --accent: #2ea043;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--text); font: 14px/1.6 "Segoe UI", "Microsoft YaHei", sans-serif; }
-  header { display: flex; align-items: center; gap: 14px; padding: 16px 28px; border-bottom: 1px solid var(--line); }
-  header .logo { width: 36px; height: 36px; border-radius: 9px; background: linear-gradient(135deg, #2ea043, #1a7f37); display: grid; place-items: center; font-weight: 700; font-size: 17px; }
-  header h1 { font-size: 17px; }
-  header .sub { color: var(--dim); font-size: 12px; }
-  header .spacer { flex: 1; }
-  button.btn { background: var(--accent); color: #fff; border: 0; border-radius: 8px; padding: 9px 18px; font-size: 13px; cursor: pointer; font-weight: 600; }
-  button.btn:hover { filter: brightness(1.1); }
-  button.btn[disabled] { opacity: .5; cursor: wait; }
-  main { max-width: 1280px; margin: 0 auto; padding: 24px 28px 60px; }
-  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 22px; }
-  .kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
-  .kpi .label { color: var(--dim); font-size: 12px; }
-  .kpi .val { font-size: 26px; font-weight: 700; margin-top: 4px; }
-  .kpi .hint { font-size: 12px; color: var(--dim); }
-  .layout { display: grid; grid-template-columns: 1fr 380px; gap: 18px; align-items: start; }
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
-  .card h2 { font-size: 14px; padding: 14px 18px; border-bottom: 1px solid var(--line); color: var(--dim); font-weight: 600; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th { text-align: left; color: var(--dim); font-weight: 500; padding: 10px 12px; border-bottom: 1px solid var(--line); font-size: 12px; white-space: nowrap; }
-  td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
-  tr:last-child td { border-bottom: 0; }
-  tr:hover td { background: var(--panel2); }
-  .score { font-weight: 700; font-size: 15px; }
-  .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600; }
-  .pill.hot { background: rgba(63,185,80,.15); color: var(--green); }
-  .pill.warm { background: rgba(210,153,34,.15); color: var(--amber); }
-  .pill.cold { background: rgba(248,81,73,.15); color: var(--red); }
-  .pill.scene-temu { background: rgba(88,166,255,.13); color: var(--blue); }
-  .pill.scene-tiktok { background: rgba(188,140,255,.15); color: #bc8cff; }
-  .bar { position: relative; height: 6px; border-radius: 4px; background: var(--line); min-width: 70px; }
-  .bar i { position: absolute; inset: 0 auto 0 0; border-radius: 4px; }
-  .report-body { padding: 16px 20px; }
-  .report-body h1 { font-size: 17px; margin-bottom: 10px; }
-  .report-body h2 { font-size: 14px; margin: 14px 0 6px; border: 0; padding: 0; color: var(--text); }
-  .report-body p, .report-body li { color: #c9d1d9; font-size: 13px; }
-  .report-body ul { padding-left: 20px; }
-  .report-meta { color: var(--dim); font-size: 12px; padding: 10px 20px; border-bottom: 1px solid var(--line); }
-  .empty { color: var(--dim); text-align: center; padding: 40px 0; font-size: 13px; }
-  .toast { position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%); background: var(--panel2); border: 1px solid var(--line); padding: 10px 22px; border-radius: 10px; font-size: 13px; display: none; }
-  @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } .kpis { grid-template-columns: repeat(2, 1fr); } }
-</style>
+<meta name="theme-color" content="#0b1016">
+<title>跨境选品侦察兵 · 工作台</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
-<header>
-  <div class="logo">侦</div>
-  <div>
-    <h1>跨境选品侦察兵</h1>
-    <div class="sub">商品池热度评分 · 利润测算 · LLM 选品日报</div>
-  </div>
-  <div class="spacer"></div>
-  <button class="btn" id="genBtn">生成今日日报</button>
-</header>
-
-<main>
-  <div class="kpis" id="kpis"></div>
-  <div class="layout">
-    <div class="card">
-      <h2>商品池 · 综合评分榜</h2>
-      <table>
-        <thead><tr>
-          <th>商品</th><th>渠道</th><th>综合分</th><th>毛利率</th><th>单件净利</th><th>趋势</th><th>竞争</th><th>结论</th>
-        </tr></thead>
-        <tbody id="rows"></tbody>
-      </table>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">侦</span>
+      <span class="brand-text"><strong>选品侦察兵</strong><small>kuajing-scout</small></span>
     </div>
-    <div class="card">
-      <h2>今日选品日报</h2>
-      <div class="report-meta" id="reportMeta">尚未生成</div>
-      <div class="report-body" id="reportBody"><div class="empty">点右上角「生成今日日报」<br>配置 LLM_API_KEY 后由大模型撰写<br>未配置时由规则引擎生成</div></div>
+
+    <nav class="nav" aria-label="主导航">
+      <button type="button" data-view="pool" aria-current="page"><span class="ico" aria-hidden="true">▤</span>选品池</button>
+      <button type="button" data-view="reports"><span class="ico" aria-hidden="true">✎</span>选品日报</button>
+      <button type="button" data-view="alerts"><span class="ico" aria-hidden="true">◉</span>预警中心<span class="badge" id="alertBadge" hidden>0</span></button>
+      <button type="button" data-view="settings"><span class="ico" aria-hidden="true">⚙</span>成本与设置</button>
+    </nav>
+
+    <div class="sidebar-foot">
+      <div class="plan-card" id="planCard">
+        <div class="row"><strong id="planName">加载中…</strong><span class="pill ghost" id="planBadge">-</span></div>
+        <div class="usage-line"><span class="muted" id="planUsageText">-</span><div class="bar"><i id="planUsageBar"></i></div></div>
+      </div>
+      <button class="user-chip" type="button" id="userChip" title="退出登录">
+        <span class="avatar" id="userAvatar">?</span>
+        <span class="stack gap-0">
+          <span id="userName" class="fs-12">-</span>
+          <span class="muted fs-11" id="userRole">-</span>
+        </span>
+      </button>
     </div>
+  </aside>
+
+  <div class="main">
+    <div class="demo-banner" id="demoBanner" hidden>演示模式：数据为示例商品池，写操作已禁用。部署后使用管理员账号登录。</div>
+
+    <header class="topbar">
+      <div>
+        <h1 id="pageTitle">选品池</h1>
+        <div class="sub" id="pageSub">按综合分排序，点击任意商品查看利润拆解</div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-ghost hide-sm" type="button" id="btnImport" data-view-action="pool">导入 CSV</button>
+        <button class="btn btn-ghost hide-sm" type="button" id="btnExport" data-view-action="pool">导出</button>
+        <button class="btn btn-primary" type="button" id="btnGenerate">生成日报</button>
+        <button class="btn btn-ghost" type="button" id="btnAddProduct" data-view-action="pool">+ 商品</button>
+      </div>
+    </header>
+
+    <main class="content" id="view">
+      <div class="skeleton h-92 mb-18"></div>
+      <div class="skeleton h-420"></div>
+    </main>
   </div>
-</main>
-<div class="toast" id="toast"></div>
+</div>
 
-<script>
-const $ = s => document.querySelector(s);
-const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+<!-- 商品新增/编辑 -->
+<dialog id="productDialog" class="modal" aria-labelledby="productDialogTitle">
+  <form id="productForm" method="dialog">
+    <div class="dialog-head">
+      <div>
+        <h2 id="productDialogTitle">新增商品</h2>
+        <div class="sub">填得越全，评分置信度越高；关税与重量直接影响利润结论</div>
+      </div>
+      <button class="btn btn-ghost btn-icon" type="button" data-close-dialog="productDialog" aria-label="关闭">✕</button>
+    </div>
+    <div class="dialog-body">
+      <div class="form-error" id="productError" role="alert" hidden></div>
+      <input type="hidden" id="p_id">
+      <div class="grid-2">
+        <label class="field"><span>商品名 *</span><input class="control" id="p_name" maxlength="120" required></label>
+        <label class="field"><span>SKU / 编码</span><input class="control" id="p_sku" maxlength="60" placeholder="用于 CSV 覆盖更新"></label>
+        <label class="field"><span>品类 *</span><input class="control" id="p_category" maxlength="40" list="categoryList" required></label>
+        <label class="field"><span>平台</span>
+          <select class="control" id="p_scene">
+            <option value="temu">Temu</option>
+            <option value="tiktok">TikTok Shop</option>
+          </select>
+        </label>
+        <label class="field"><span>1688 拿货价（元）*</span><input class="control" id="p_cost" type="number" min="0" step="0.01" required></label>
+        <label class="field"><span>平台售价（美元）*</span><input class="control" id="p_sale" type="number" min="0.01" step="0.01" required></label>
+        <label class="field"><span>重量（克）</span><input class="control" id="p_weight" type="number" min="1" step="1" value="200"></label>
+        <label class="field"><span>关税率（0-1，留空用默认）</span><input class="control" id="p_duty" type="number" min="0" max="1" step="0.01" placeholder="如 0.25"></label>
+        <label class="field"><span>目标毛利率（留空用全局）</span><input class="control" id="p_target" type="number" min="0.01" max="0.95" step="0.01" placeholder="如 0.45"></label>
+        <label class="field"><span>物流属性</span>
+          <select class="control" id="p_logistics">
+            <option value="light">轻小件</option>
+            <option value="heavy">重货</option>
+          </select>
+        </label>
+        <label class="field"><span>合规风险</span>
+          <select class="control" id="p_compliance">
+            <option value="low">低</option>
+            <option value="mid">中</option>
+            <option value="high">高（需资质/认证）</option>
+          </select>
+        </label>
+        <label class="field"><span>标签（逗号分隔，用于趋势信号匹配）</span><input class="control" id="p_tags" maxlength="200" placeholder="pet brush, grooming"></label>
+      </div>
+      <div class="section-title">评分输入（0-100）</div>
+      <div class="grid-3">
+        <label class="field"><span>趋势热度</span><input class="control" id="p_trend" type="number" min="0" max="100" step="1" value="50"></label>
+        <label class="field"><span>竞争度</span><input class="control" id="p_competition" type="number" min="0" max="100" step="1" value="50"></label>
+        <label class="field"><span>复购属性</span><input class="control" id="p_repurchase" type="number" min="0" max="100" step="1" value="50"></label>
+        <label class="field"><span>差异化空间</span><input class="control" id="p_diff" type="number" min="0" max="100" step="1" value="30"></label>
+        <label class="field check align-end"><input type="checkbox" id="p_reviewed"><span>已完成合规复核</span></label>
+      </div>
+      <label class="field"><span>备注</span><textarea class="control" id="p_notes" rows="3" maxlength="2000"></textarea></label>
+      <datalist id="categoryList"></datalist>
+    </div>
+    <div class="dialog-foot">
+      <span class="muted small" id="productHint">保存后立即重算评分</span>
+      <span class="spacer"></span>
+      <button class="btn btn-ghost" type="button" data-close-dialog="productDialog">取消</button>
+      <button class="btn btn-primary" type="submit" id="productSave">保存</button>
+    </div>
+  </form>
+</dialog>
 
-function toast(msg) {
-  const t = $('#toast'); t.textContent = msg; t.style.display = 'block';
-  setTimeout(() => t.style.display = 'none', 2600);
-}
-function pillClass(v) { return v >= 75 ? 'hot' : v >= 60 ? 'warm' : 'cold'; }
-function bar(v, color) { return `<div class="bar"><i style="width:${Math.max(2, Math.min(100, v))}%;background:${color}"></i></div>`; }
+<!-- CSV 导入 -->
+<dialog id="importDialog" class="modal" aria-labelledby="importTitle">
+  <div class="dialog-head">
+    <div><h2 id="importTitle">批量导入商品</h2><div class="sub">支持中英文表头；有 SKU 时按 SKU 覆盖更新</div></div>
+    <button class="btn btn-ghost btn-icon" type="button" data-close-dialog="importDialog" aria-label="关闭">✕</button>
+  </div>
+  <div class="dialog-body">
+    <div class="hint-box mb-14">
+      必填列：<code>商品名 / 拿货价 / 售价</code>。可选列：编码、品类、平台、重量g、趋势分、竞争度、复购、差异化、物流、合规风险、关税率、目标毛利率、备注。
+      <a href="/api/products/template.csv" download>下载模板</a>
+    </div>
+    <label class="field"><span>选择 CSV 文件</span><input class="control" type="file" id="importFile" accept=".csv,text/csv"></label>
+    <label class="field"><span>或直接粘贴 CSV 内容</span><textarea class="control" id="importText" rows="8" placeholder="商品名,拿货价,售价&#10;示例商品,5,15.99"></textarea></label>
+    <div class="form-error" id="importError" role="alert" hidden></div>
+    <div id="importResult" class="small"></div>
+  </div>
+  <div class="dialog-foot">
+    <span class="spacer"></span>
+    <button class="btn btn-ghost" type="button" data-close-dialog="importDialog">关闭</button>
+    <button class="btn btn-primary" type="button" id="importSubmit">开始导入</button>
+  </div>
+</dialog>
 
-function miniMd(md) {
-  let html = esc(md)
-    .replace(/^### (.+)$/gm, '<h2>$1</h2>')
-    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/^&gt; (.+)$/gm, '<p style="color:#8b949e;font-size:12px">$1</p>');
-  return html.split(/\n{2,}/).map(block => {
-    if (/^<(h\d|p)/.test(block.trim())) return block;
-    const items = block.split('\n').filter(l => l.trim());
-    if (items.every(l => l.trim().startsWith('-'))) return '<ul>' + items.map(l => '<li>' + l.trim().slice(1) + '</li>').join('') + '</ul>';
-    return '<p>' + block.replace(/\n/g, '<br>') + '</p>';
-  }).join('');
-}
+<!-- 商品详情抽屉 -->
+<dialog id="detailDrawer" class="drawer" aria-labelledby="detailTitle">
+  <div class="dialog-head">
+    <div><h2 id="detailTitle">商品详情</h2><div class="sub" id="detailSub"></div></div>
+    <button class="btn btn-ghost btn-icon" type="button" data-close-dialog="detailDrawer" aria-label="关闭">✕</button>
+  </div>
+  <div class="dialog-body" id="detailBody"></div>
+  <div class="dialog-foot">
+    <button class="btn btn-ghost" type="button" id="detailArchive">归档</button>
+    <span class="spacer"></span>
+    <button class="btn btn-ghost" type="button" data-close-dialog="detailDrawer">关闭</button>
+    <button class="btn btn-primary" type="button" id="detailEdit">编辑</button>
+  </div>
+</dialog>
 
-async function loadProducts() {
-  const { products } = await (await fetch('/api/products')).json();
-  const sorted = [...products].sort((a, b) => b.scout_score - a.scout_score);
-  const avgMargin = (products.reduce((s, p) => s + p.margin_pct, 0) / products.length).toFixed(1);
-  const hot = products.filter(p => p.trend_score >= 80).length;
-  const best = sorted[0];
+<!-- 通用确认 -->
+<dialog id="confirmDialog" class="modal" aria-labelledby="confirmTitle">
+  <div class="dialog-head"><div><h2 id="confirmTitle">确认操作</h2><div class="sub" id="confirmSub"></div></div></div>
+  <div class="dialog-body"><p id="confirmText" class="muted"></p></div>
+  <div class="dialog-foot">
+    <span class="spacer"></span>
+    <button class="btn btn-ghost" type="button" id="confirmCancel">取消</button>
+    <button class="btn btn-danger" type="button" id="confirmOk">确认</button>
+  </div>
+</dialog>
 
-  $('#kpis').innerHTML = `
-    <div class="kpi"><div class="label">商品池</div><div class="val">${products.length}</div><div class="hint">在监控商品总数</div></div>
-    <div class="kpi"><div class="label">平均毛利率</div><div class="val">${avgMargin}<span style="font-size:14px">%</span></div><div class="hint">按当前核价与扣点估算</div></div>
-    <div class="kpi"><div class="label">高热商品（趋势≥80）</div><div class="val">${hot}</div><div class="hint">趋势分满分 100</div></div>
-    <div class="kpi"><div class="label">今日首推</div><div class="val" style="font-size:17px;padding-top:6px">${esc(best.name)}</div><div class="hint">综合分 ${best.scout_score} · ${esc(best.verdict)}</div></div>`;
+<!-- API Key 一次性展示 -->
+<dialog id="keyDialog" class="modal" aria-labelledby="keyTitle">
+  <div class="dialog-head"><div><h2 id="keyTitle">API Key 已创建</h2><div class="sub">只显示一次，请立即复制保存</div></div></div>
+  <div class="dialog-body">
+    <label class="field"><span>Key</span><input class="control mono" id="keyValue" readonly></label>
+    <div class="hint-box">使用方式：<code>curl -H "X-API-Key: &lt;key&gt;" https://your-host/api/products</code></div>
+  </div>
+  <div class="dialog-foot"><span class="spacer"></span>
+    <button class="btn btn-primary" type="button" id="keyCopy">复制</button>
+    <button class="btn btn-ghost" type="button" data-close-dialog="keyDialog">关闭</button>
+  </div>
+</dialog>
 
-  $('#rows').innerHTML = sorted.map(p => `
-    <tr>
-      <td><strong>${esc(p.name)}</strong><br><span style="color:var(--dim);font-size:11.5px">${esc(p.category)} · 1688 ¥${p.cost_1688} → 售价 $${p.sale_usd}</span></td>
-      <td><span class="pill scene-${p.scene}">${p.scene === 'temu' ? 'Temu' : 'TikTok'}</span></td>
-      <td><span class="score" style="color:${p.scout_score >= 75 ? 'var(--green)' : p.scout_score >= 60 ? 'var(--amber)' : 'var(--red)'}">${p.scout_score}</span></td>
-      <td>${p.margin_pct}%</td>
-      <td>$${p.profit_usd}</td>
-      <td>${bar(p.trend_score, '#3fb950')}</td>
-      <td>${bar(p.competition, p.competition >= 75 ? '#f85149' : '#d29922')}</td>
-      <td><span class="pill ${pillClass(p.scout_score)}">${esc(p.verdict)}</span></td>
-    </tr>`).join('');
-}
-
-async function loadTodayReport() {
-  const d = new Date().toISOString().slice(0, 10);
-  const r = await fetch('/api/reports/' + d);
-  if (!r.ok) return;
-  const { report } = await r.json();
-  renderReport(report);
-}
-
-function renderReport(report) {
-  $('#reportMeta').innerHTML = `${report.day} · ${report.source === 'llm' ? 'LLM 生成（' + esc(report.model) + '）' : '规则引擎生成'}`;
-  $('#reportBody').innerHTML = miniMd(report.content);
-}
-
-$('#genBtn').addEventListener('click', async e => {
-  const btn = e.currentTarget;
-  btn.disabled = true; btn.textContent = '生成中…';
-  try {
-    const r = await fetch('/api/report/generate', { method: 'POST' });
-    const { report } = await r.json();
-    renderReport(report);
-    toast('日报已生成，存档 reports/daily-' + report.day + '.md');
-  } catch (err) { toast('生成失败：' + err.message); }
-  btn.disabled = false; btn.textContent = '生成今日日报';
-});
-
-loadProducts().catch(e => toast('加载失败: ' + e.message));
-loadTodayReport();
-</script>
+<div class="toast-wrap" id="toasts" aria-live="polite" aria-atomic="false"></div>
+<script src="/js/markdown.js" defer></script>
+<script src="/js/app.js" defer></script>
 </body>
 </html>

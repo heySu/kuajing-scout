@@ -1,0 +1,11 @@
+node_modules
+data
+reports
+docs
+test
+.git
+.gitignore
+.env
+.env.*
+*.log
+tmp-*
