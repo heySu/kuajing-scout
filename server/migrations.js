@@ -183,6 +183,39 @@ const MIGRATIONS = [
         CREATE INDEX IF NOT EXISTS idx_alerts_tenant ON alerts(tenant_id, status, day);
       `);
     }
+  },
+  {
+    version: 2,
+    name: 'spu-fields',
+    /** SPU 打通层：补上 scout 此前缺失的 D 卖点素材 / E 脚本成片 / F 商业化 字段。
+     *  以 products 表为 SPU 主数据中枢，让选品→素材→脚本→成片→投放的数据互通。 */
+    up() {
+      const addCol = (col, def) => {
+        const row = db.prepare("SELECT COUNT(*) c FROM pragma_table_info('products') WHERE name = ?").get(col);
+        if (!row.c) db.prepare(`ALTER TABLE products ADD COLUMN ${col} ${def}`).run();
+      };
+      // D 卖点素材
+      addCol('selling_points', "TEXT NOT NULL DEFAULT ''");
+      addCol('pain_points', "TEXT NOT NULL DEFAULT ''");
+      addCol('target_audience', "TEXT NOT NULL DEFAULT ''");
+      addCol('scenario', "TEXT NOT NULL DEFAULT ''");
+      addCol('material_refs', "TEXT NOT NULL DEFAULT '[]'"); // JSON: [{name,url,type}]
+      // E 内容生产
+      addCol('script_15s', "TEXT NOT NULL DEFAULT ''");
+      addCol('script_30s', "TEXT NOT NULL DEFAULT ''");
+      addCol('script_60s', "TEXT NOT NULL DEFAULT ''");
+      addCol('voiceover', "TEXT NOT NULL DEFAULT ''");
+      addCol('content_tags', "TEXT NOT NULL DEFAULT ''");
+      addCol('content_status', "TEXT NOT NULL DEFAULT 'none'"); // none/draft/reviewing/approved/delivered
+      addCol('kling_task_id', "TEXT NOT NULL DEFAULT ''");
+      addCol('heygen_task_id', "TEXT NOT NULL DEFAULT ''");
+      // F 商业化
+      addCol('customer_id', "TEXT NOT NULL DEFAULT ''");
+      addCol('access_code', "TEXT NOT NULL DEFAULT ''");
+      addCol('tier', "TEXT NOT NULL DEFAULT ''"); // 15/30/60
+      addCol('order_status', "TEXT NOT NULL DEFAULT 'none'"); // none/paid/producing/delivered
+      addCol('cost_ledger', "TEXT NOT NULL DEFAULT '[]'"); // JSON: [{kind,seconds,cost_usd,at}]
+    }
   }
 ];
 

@@ -47,6 +47,30 @@ async function startApp() {
   };
 }
 
+/** 与 startApp 相同，但额外注册 spu / video（成片工厂）路由，供其 e2e 测试使用 */
+async function startAppVideo() {
+  const { initSchema, db } = require('../server/db');
+  initSchema();
+  const auth = require('../server/services/auth');
+  const boot = await auth.ensureBootstrap();
+  const { seedProducts } = require('../server/seed');
+  seedProducts(boot.tenant.id);
+  const { createServer, route } = require('../server/app');
+  for (const mod of ['ops', 'auth', 'products', 'reports', 'alerts', 'settings', 'spu', 'video']) {
+    require('../server/api/' + mod)(route);
+  }
+  const server = createServer();
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const port = server.address().port;
+  return {
+    base: `http://127.0.0.1:${port}`,
+    server,
+    db,
+    tenantId: boot.tenant.id,
+    close: () => new Promise((resolve) => server.close(resolve))
+  };
+}
+
 async function request(base, method, urlPath, { cookie = '', csrf = '', body, headers = {} } = {}) {
   const h = { Accept: 'application/json', ...headers };
   if (cookie) h.cookie = cookie;
@@ -70,4 +94,4 @@ async function login(base, email = 'demo@scout.local', password = 'demo12345') {
   return { status: res.status, data, cookie, csrf: data.csrf };
 }
 
-module.exports = { prepareEnv, startApp, request, login };
+module.exports = { prepareEnv, startApp, startAppVideo, request, login };

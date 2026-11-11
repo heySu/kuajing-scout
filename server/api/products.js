@@ -15,6 +15,7 @@ module.exports = (route) => {
     scene: ctx.query.get('scene') || '',
     category: ctx.query.get('category') || '',
     verdict: ctx.query.get('verdict') || '',
+    content_status: ctx.query.get('content_status') || '',
     status: ctx.query.get('status') || 'active',
     sort: ctx.query.get('sort') || 'score',
     order: ctx.query.get('order') || 'desc',

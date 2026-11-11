@@ -50,7 +50,8 @@ const { initSchema, db } = require('../server/db');
 test('迁移保留商品/日报/快照并建立默认租户', () => {
   initSchema();
   const version = db.prepare('SELECT MAX(version) v FROM schema_migrations').get().v;
-  assert.equal(version, 1);
+  // 当前 schema 含 v1（旧库多租户升级）+ v2（SPU 打通层字段），故最新版本为 2
+  assert.equal(version, 2);
 
   const product = db.prepare('SELECT * FROM products').get();
   assert.equal(product.name, '旧商品');

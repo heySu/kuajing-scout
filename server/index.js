@@ -31,6 +31,8 @@ require('./api/products')(route);
 require('./api/reports')(route);
 require('./api/alerts')(route);
 require('./api/settings')(route);
+require('./api/spu')(route);
+require('./api/video')(route);
 
 const server = createServer();
 

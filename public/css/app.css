@@ -65,6 +65,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .mb-12 { margin-bottom: 12px; }
 .text-red { color: var(--red); }
 .text-green { color: var(--green); }
+.text-danger { color: var(--red); }
+.text-ok { color: var(--green); }
 .text-amber { color: var(--amber); }
 .text-dim { color: var(--dim); }
 .w-auto { width: auto; }
@@ -267,6 +269,11 @@ table.data .meta { color: var(--dim); font-size: 11.5px; margin-top: 2px; }
 .pill.mid { background: rgba(217, 160, 43, .14); color: #edc363; }
 .pill.high { background: rgba(240, 86, 77, .14); color: #ff9a94; }
 .pill.ghost { background: var(--panel-2); color: var(--text-2); }
+.pill.cs-none { background: rgba(150, 158, 170, .14); color: #aeb6c2; }
+.pill.cs-draft { background: rgba(88, 166, 255, .14); color: #8cc6ff; }
+.pill.cs-reviewing { background: rgba(217, 160, 43, .16); color: #edc363; }
+.pill.cs-approved { background: rgba(63, 185, 80, .16); color: #7fe08f; }
+.pill.cs-delivered { background: rgba(176, 131, 240, .16); color: #d0b0ff; }
 
 .score { font-weight: 700; font-size: 15px; font-variant-numeric: tabular-nums; }
 .score.main { color: var(--green); }

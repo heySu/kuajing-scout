@@ -59,6 +59,15 @@ function assertSameOrigin(req) {
   if (host !== req.headers.host) throw new HttpError(403, 'bad_origin', '跨站请求被拒绝');
 }
 
+/** 计算允许跨域的 Origin（供纯前端工具经 API Key 回传数据）；未配置则仅同源 */
+function corsAllowOrigin(req) {
+  if (config.corsAllowAll) return req.headers.origin || '*';
+  const origin = req.headers.origin;
+  if (!origin) return null;
+  if (config.corsAllowOrigins.includes(origin)) return origin;
+  return null;
+}
+
 function resolveAuth(req) {
   const cookies = parseCookies(req.headers.cookie);
   const session = auth.authenticate(cookies[auth.COOKIE]);
@@ -88,6 +97,8 @@ function createServer({ publicDir = path.join(__dirname, '..', 'public') } = {})
     applySecurityHeaders(res);
     res.setHeader('X-Request-Id', reqId);
     res.setHeader('Vary', 'Cookie, Origin');
+    const allowOrigin = corsAllowOrigin(req);
+    if (allowOrigin) res.setHeader('Access-Control-Allow-Origin', allowOrigin);
 
     let url;
     try { url = new URL(req.url, 'http://localhost'); }
@@ -114,6 +125,17 @@ function createServer({ publicDir = path.join(__dirname, '..', 'public') } = {})
         }
       }
       return serveStatic(req, res, publicDir, url.pathname);
+    }
+
+    // 跨域预检（仅当 Origin 被 CORS 白名单允许时才回应，避免非法源拿到预检通过）
+    if (req.method === 'OPTIONS' && url.pathname.startsWith('/api/')) {
+      if (res.getHeader('Access-Control-Allow-Origin')) {
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-api-key, x-csrf-token, Authorization');
+        res.setHeader('Access-Control-Max-Age', '600');
+        return sendText(res, 204, '');
+      }
+      return sendText(res, 404, 'not found');
     }
 
     try {
@@ -166,13 +188,16 @@ function createServer({ publicDir = path.join(__dirname, '..', 'public') } = {})
         }
 
         if (req.method !== 'GET' && req.method !== 'HEAD') {
-          assertSameOrigin(req);
-          if (session.via === 'session') {
-            const token = req.headers['x-csrf-token'];
-            if (!token || token !== session.csrf) throw new HttpError(403, 'csrf_failed', 'CSRF 校验失败，请刷新页面重试');
-          }
-          if (config.demoMode && ctx.via === 'session' && session.user.email === 'demo@scout.local') {
-            throw new HttpError(403, 'demo_readonly', '演示账号为只读，部署后使用管理员账号');
+          // API Key 为 Bearer 凭证，无需同域 / CSRF 校验（与浏览器会话隔离）
+          if (session.via !== 'api_key') {
+            assertSameOrigin(req);
+            if (session.via === 'session') {
+              const token = req.headers['x-csrf-token'];
+              if (!token || token !== session.csrf) throw new HttpError(403, 'csrf_failed', 'CSRF 校验失败，请刷新页面重试');
+            }
+            if (config.demoMode && ctx.via === 'session' && session.user.email === 'demo@scout.local') {
+              throw new HttpError(403, 'demo_readonly', '演示账号为只读，部署后使用管理员账号');
+            }
           }
         }
 

@@ -17,7 +17,7 @@
     me: null,
     view: 'pool',
     settingsTab: 'cost',
-    filters: { q: '', scene: '', category: '', verdict: '', sort: 'score', risk: false, page: 1, pageSize: 20 },
+    filters: { q: '', scene: '', category: '', verdict: '', content_status: '', sort: 'score', risk: false, page: 1, pageSize: 20 },
     pool: null,
     reports: [],
     reportDay: null,
@@ -31,6 +31,9 @@
     detail: null,
     busy: false
   };
+
+  // 成片状态轮询定时器（模块级，跨详情重渲染保持可取消）
+  let videoPollTimer = null;
 
   const VIEW_META = {
     pool: { title: '选品池', sub: '按综合分排序，点击任意商品查看利润拆解与评分依据' },
@@ -263,6 +266,7 @@
     catch (e) { $('#view').innerHTML = '<div class="panel"><div class="empty">加载失败：' + esc(e.message) + '</div></div>'; return; }
     const p = data.pool;
     const f = state.filters;
+    const CS_LABEL = { none: '未开始', draft: '草稿', reviewing: '审核中', approved: '已通过', delivered: '已交付' };
     const cats = data.facets.categories.filter((c) => c.value);
     const catOptions = ['<option value="">全部品类</option>'].concat(
       cats.map((c) => `<option value="${esc(c.value)}" ${f.category === c.value ? 'selected' : ''}>${esc(c.value)}（${c.count}）</option>`)
@@ -294,10 +298,20 @@
             <option value="review" ${f.verdict === 'review' ? 'selected' : ''}>合规待审</option>
             <option value="drop" ${f.verdict === 'drop' ? 'selected' : ''}>观望/放弃</option>
           </select>
+          <select class="control" id="fcs" aria-label="内容状态筛选">
+            <option value="">全部内容状态</option>
+            <option value="none" ${f.content_status === 'none' ? 'selected' : ''}>未开始</option>
+            <option value="draft" ${f.content_status === 'draft' ? 'selected' : ''}>草稿</option>
+            <option value="reviewing" ${f.content_status === 'reviewing' ? 'selected' : ''}>审核中</option>
+            <option value="approved" ${f.content_status === 'approved' ? 'selected' : ''}>已通过</option>
+            <option value="delivered" ${f.content_status === 'delivered' ? 'selected' : ''}>已交付</option>
+          </select>
           <select class="control" id="fsort" aria-label="排序">
             <option value="score" ${f.sort === 'score' ? 'selected' : ''}>按综合分</option>
             <option value="margin" ${f.sort === 'margin' ? 'selected' : ''}>按毛利率</option>
             <option value="net" ${f.sort === 'net' ? 'selected' : ''}>按单件净利</option>
+            <option value="netincl" ${f.sort === 'netincl' ? 'selected' : ''}>按含成片后净利</option>
+            <option value="cost" ${f.sort === 'cost' ? 'selected' : ''}>按成片成本（高→低）</option>
             <option value="trend" ${f.sort === 'trend' ? 'selected' : ''}>按趋势分</option>
             <option value="competition" ${f.sort === 'competition' ? 'selected' : ''}>按竞争度（低→高）</option>
             <option value="confidence" ${f.sort === 'confidence' ? 'selected' : ''}>按数据置信度</option>
@@ -312,7 +326,8 @@
           <table class="data">
             <thead><tr>
               <th>商品</th><th>平台</th><th>综合分</th><th class="num">毛利率</th><th class="num">单件净利</th>
-              <th class="num">保本价</th><th>30 天热度</th><th>竞争度</th><th>置信度</th><th>结论</th>
+              <th class="num">含成片后净利</th>
+              <th class="num">保本价</th><th>30 天热度</th><th>竞争度</th><th>置信度</th><th>内容状态</th><th>结论</th>
             </tr></thead>
             <tbody>
               ${data.items.map((it) => `
@@ -322,12 +337,14 @@
                   <td><span class="score ${it.verdict_key}">${it.scout_score}</span></td>
                   <td class="num">${pct(it.margin_pct)}</td>
                   <td class="num" style="color:${it.profit.net_profit_usd > 0 ? 'inherit' : 'var(--red)'}">${money(it.profit.net_profit_usd)}</td>
+                  <td class="num" style="color:${it.net_profit_incl_cost_usd > 0 ? 'inherit' : 'var(--red)'}">${money(it.net_profit_incl_cost_usd)}${it.total_cost_usd ? `<div class="muted small">成本 ${money(it.total_cost_usd)}</div>` : ''}</td>
                   <td class="num">${money(it.profit.break_even_usd)}</td>
                   <td>${sparkline(it.series, 84, 24)}</td>
                   <td><div class="bar-row"><span class="bar"><i class="${it.competition >= 80 ? 'red' : it.competition >= 60 ? 'amber' : 'green'}" style="width:${clamp(it.competition, 0, 100)}%"></i></span><span class="muted small">${Math.round(it.competition)}</span></div></td>
                   <td><span class="pill ${it.confidence >= 85 ? 'low' : it.confidence >= 65 ? 'mid' : 'high'}">${it.confidence_label}</span></td>
+                  <td><span class="pill cs-${it.content_status || 'none'}">${CS_LABEL[it.content_status] || '未开始'}</span></td>
                   <td><span class="pill ${it.verdict_key}">${esc(it.verdict)}</span></td>
-                </tr>`).join('') || `<tr><td colspan="10"><div class="empty"><h3>没有匹配的商品</h3><p>换个筛选条件，或导入商品数据</p><button class="btn btn-primary" data-action="add-product">+ 新增商品</button></div></td></tr>`}
+                </tr>`).join('') || `<tr><td colspan="12"><div class="empty"><h3>没有匹配的商品</h3><p>换个筛选条件，或导入商品数据</p><button class="btn btn-primary" data-action="add-product">+ 新增商品</button></div></td></tr>`}
             </tbody>
           </table>
         </div>
@@ -359,7 +376,7 @@
       if (!el) return;
       el.addEventListener('change', () => { state.filters[key] = parse(el.type === 'checkbox' ? el.checked : el.value); state.filters.page = 1; renderPool(); });
     };
-    bind('#fscene', 'scene'); bind('#fcat', 'category'); bind('#fverdict', 'verdict'); bind('#fsort', 'sort'); bind('#frisk', 'risk');
+    bind('#fscene', 'scene'); bind('#fcat', 'category'); bind('#fverdict', 'verdict'); bind('#fcs', 'content_status'); bind('#fsort', 'sort'); bind('#frisk', 'risk');
   }
 
   /* ---------------- 详情抽屉 ---------------- */
@@ -433,10 +450,189 @@
       <div class="kv"><span class="k">竞争度 / 复购 / 差异化</span><span class="v">${p.competition} / ${p.repurchase} / ${p.differentiation}</span></div>
       <div class="kv"><span class="k">合规风险 / 复核</span><span class="v"><span class="pill ${p.compliance}">${({ low: '低', mid: '中', high: '高' })[p.compliance]}</span> ${p.compliance_reviewed ? '已复核' : '未复核'}</span></div>
       ${p.notes ? `<div class="kv"><span class="k">备注</span><span class="v">${esc(p.notes)}</span></div>` : ''}
+
+      <div class="section-title">SPU · 内容生产（选品 → 素材 → 脚本 → 成片）</div>
+      <div class="spu-block">
+        <label class="field"><span>核心卖点（每行一条）</span><textarea class="control" id="sp_selling" rows="2" maxlength="1000">${esc(p.selling_points || '')}</textarea></label>
+        <div class="grid-2">
+          <label class="field"><span>目标人群</span><input class="control" id="sp_audience" maxlength="200" value="${esc(p.target_audience || '')}"></label>
+          <label class="field"><span>使用场景</span><input class="control" id="sp_scenario" maxlength="500" value="${esc(p.scenario || '')}"></label>
+        </div>
+        <label class="field"><span>15 秒脚本</span><textarea class="control" id="sp_s15" rows="3" maxlength="8000">${esc(p.script_15s || '')}</textarea></label>
+        <label class="field"><span>30 秒脚本</span><textarea class="control" id="sp_s30" rows="3" maxlength="8000">${esc(p.script_30s || '')}</textarea></label>
+        <label class="field"><span>60 秒脚本</span><textarea class="control" id="sp_s60" rows="3" maxlength="8000">${esc(p.script_60s || '')}</textarea></label>
+        <label class="field"><span>旁白 / voiceover</span><textarea class="control" id="sp_vo" rows="2" maxlength="8000">${esc(p.voiceover || '')}</textarea></label>
+        <div class="grid-2">
+          <label class="field"><span>内容状态</span>
+            <select class="control" id="sp_status">
+              ${['none','draft','reviewing','approved','delivered'].map((s) => `<option value="${s}" ${p.content_status === s ? 'selected' : ''}>${({none:'未开始',draft:'草稿',reviewing:'审核中',approved:'已通过',delivered:'已交付'})[s]}</option>`).join('')}
+            </select>
+          </label>
+          <label class="field"><span>档位 / 订单状态</span>
+            <input class="control" id="sp_tier" value="${esc((p.tier ? p.tier + 's' : '未设') + ' / ' + (p.order_status || 'none'))}" readonly>
+          </label>
+        </div>
+        <div class="kv"><span class="k">素材引用</span><span class="v">${Array.isArray(p.material_refs) && p.material_refs.length ? p.material_refs.map((m) => esc((m && (m.name || m.url)) || '素材')).join('、') : '未上传'}</span></div>
+        <div class="kv"><span class="k">成片任务</span><span class="v">kling: ${esc(p.kling_task_id || '-')} · heygen: ${esc(p.heygen_task_id || '-')}</span></div>
+        <div class="kv"><span class="k">含成片后净利</span><span class="v" id="sp_net_incl"><span class="muted small">计算中…</span></span></div>
+        <div class="section-subtitle" style="margin-top:14px">成片生成（可灵 / HeyGen）<span id="sp_video_status" class="muted small"></span></div>
+        <div class="grid-2">
+          <label class="field"><span>时长（秒）</span>
+            <select class="control" id="sp_vduration">
+              <option value="15">15 秒</option>
+              <option value="30" selected>30 秒</option>
+              <option value="60">60 秒</option>
+            </select>
+          </label>
+          <label class="field"><span>成片供应商</span>
+            <select class="control" id="sp_vprovider">
+              <option value="kling">可灵 Kling</option>
+              <option value="heygen">HeyGen</option>
+            </select>
+          </label>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <button class="btn btn-primary btn-sm" id="sp_vgen" ${can('write_product') ? '' : 'disabled'}>生成成片并记账</button>
+          <button class="btn btn-ghost btn-sm" id="sp_vstatus">刷新成片状态</button>
+          <button class="btn btn-ghost btn-sm" id="sp_vcheck">配置自检</button>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button class="btn btn-primary btn-sm" id="sp_save" ${can('write_product') ? '' : 'disabled'}>保存内容生产</button>
+          <button class="btn btn-ghost btn-sm" id="sp_export">导出 SPU JSON</button>
+          <label class="btn btn-ghost btn-sm" id="sp_import_label" ${can('write_product') ? '' : 'hidden'}>
+            导入 SPU JSON
+            <input type="file" id="sp_import" accept="application/json,.json" ${can('write_product') ? '' : 'disabled'} hidden>
+          </label>
+        </div>
+        <div class="hint-box" style="margin-top:10px">导出 SPU JSON 可交给脚本/成片工具，或导入 profit / listing 等模块；保存后写入商品主数据，与选品、利润同源。<br>也可在上方「导入 SPU JSON」中选择 profit / listing 导出的 JSON，自动回填成本、素材引用等字段。</div>
+      </div>
     `;
     $('#detailEdit').hidden = !can('write_product');
     $('#detailArchive').hidden = !can('write_product');
     $('#detailArchive').textContent = p.status === 'archived' ? '恢复' : '归档';
+    bindSpv(p);
+  }
+
+  function bindSpv(p) {
+    if (videoPollTimer) { clearTimeout(videoPollTimer); videoPollTimer = null; }
+    const save = $('#sp_save');
+    if (save) save.addEventListener('click', async () => {
+      const body = {
+        selling_points: $('#sp_selling').value,
+        target_audience: $('#sp_audience').value,
+        scenario: $('#sp_scenario').value,
+        script_15s: $('#sp_s15').value,
+        script_30s: $('#sp_s30').value,
+        script_60s: $('#sp_s60').value,
+        voiceover: $('#sp_vo').value,
+        content_status: $('#sp_status').value
+      };
+      try {
+        await api('/api/products/' + p.id + '/script', { method: 'PATCH', body });
+        toast('内容生产已保存');
+        state.detail = (await api('/api/products/' + p.id)).product;
+      } catch (e) { toast(e.message, 'error'); }
+    });
+    const exp = $('#sp_export');
+    if (exp) exp.addEventListener('click', () => download('/api/products/' + p.id + '/spu.json'));
+    const imp = $('#sp_import');
+    if (imp) imp.addEventListener('change', async () => {
+      const file = imp.files && imp.files[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        let payload;
+        try { payload = JSON.parse(text); }
+        catch (e) { throw new Error('JSON 解析失败：' + e.message); }
+        const res = await api('/api/products/' + p.id + '/spu-import', { method: 'POST', body: { payload } });
+        toast('已导入：' + (res.imported || []).join('、'), 'success');
+        state.detail = (await api('/api/products/' + p.id)).product;
+        renderDetail(state.detail);
+      } catch (e) { toast(e.message, 'error'); }
+      finally { imp.value = ''; }
+    });
+
+    // 成片工厂：供应商状态 + 生成 + 实时状态轮询 + 配置自检
+    const vLabel = (name) => (name === 'kling' ? '可灵' : 'HeyGen');
+    function setVStat(html) {
+      const el = document.getElementById('sp_video_status');
+      if (el) el.innerHTML = ' · ' + html;
+    }
+    async function loadVideoStatus() {
+      try {
+        const { providers } = await api('/api/video/providers');
+        if (videoPollTimer) return; // 轮询进行中，避免覆盖进度提示
+        setVStat(providers.map((x) => `${vLabel(x.name)}:${x.mode === 'live' ? '已配置' : '沙盒'}($${x.perSecondUsd}/s)`).join(' / '));
+      } catch { /* 忽略状态展示错误 */ }
+    }
+    loadVideoStatus();
+
+    // 轮询成片状态直到终态；每 3s 一次，最多 40 次（约 2 分钟）
+    async function pollStatus(provider, tries = 0) {
+      if (videoPollTimer) { clearTimeout(videoPollTimer); videoPollTimer = null; }
+      const label = vLabel(provider);
+      try {
+        const { status } = await api('/api/products/' + p.id + '/video/' + provider + '/status');
+        const st = status.status;
+        if (st === 'none') { setVStat(`${label}：暂无任务`); return; }
+        if (st === 'succeeded') {
+          const seg = status.segments && status.segments > 1 ? `（${status.segments} 段已提交）` : '';
+          setVStat(`<span class="text-ok">${label}：已完成${seg}${status.sandbox ? '·沙盒' : ''}</span>`);
+          await loadNetIncl();
+          return;
+        }
+        if (st === 'failed') { setVStat(`<span class="text-danger">${label}：生成失败，请检查脚本/素材或供应商额度</span>`); return; }
+        if (st === 'unknown') { setVStat(`${label}：任务已存在，但未配置密钥无法查询`); return; }
+        setVStat(`<span class="pill cs-reviewing">${label}：生成中…（${tries + 1}）</span>`);
+        if (tries < 40) videoPollTimer = setTimeout(() => pollStatus(provider, tries + 1), 3000);
+      } catch (e) {
+        setVStat(`<span class="text-danger">${label}：状态查询失败 - ${esc(e.message)}</span>`);
+      }
+    }
+
+    const vgen = $('#sp_vgen');
+    if (vgen) vgen.addEventListener('click', async () => {
+      const provider = $('#sp_vprovider').value;
+      const duration = Number($('#sp_vduration').value);
+      vgen.disabled = true;
+      vgen.textContent = '提交中…';
+      try {
+        const r = await api('/api/products/' + p.id + '/video', { method: 'POST', body: { provider, duration } });
+        const v = r.video;
+        toast(`${vLabel(provider)} 成片已提交：task=${v.task_id}，记账 $${v.cost_usd}（${v.seconds}s）`, 'success');
+        state.detail = (await api('/api/products/' + p.id)).product;
+        renderDetail(state.detail);
+        pollStatus(provider);
+      } catch (e) { toast(e.message, 'error'); vgen.disabled = false; vgen.textContent = '生成成片并记账'; }
+    });
+
+    const vrefresh = $('#sp_vstatus');
+    if (vrefresh) vrefresh.addEventListener('click', () => pollStatus($('#sp_vprovider').value));
+
+    const vcheck = $('#sp_vcheck');
+    if (vcheck) vcheck.addEventListener('click', async () => {
+      try {
+        const { providers } = await api('/api/video/selfcheck');
+        const html = providers.map((x) => `${vLabel(x.name)}:${x.configured ? '真实(' + x.mode + ')' : '沙盒'}${x.maxSeconds ? '·单段≤' + x.maxSeconds + 's' : ''}`).join(' / ');
+        setVStat(html);
+        toast(providers.map((x) => x.note).join('\n'), 'info');
+      } catch (e) { toast(e.message, 'error'); }
+    });
+
+    // 含成片后净利：拉取 SPU 视图（已扣减成本账本）并填充（每次查询最新 DOM，跨重渲染安全）
+    async function loadNetIncl() {
+      const el = document.getElementById('sp_net_incl');
+      if (!el) return;
+      try {
+        const spv = await api('/api/products/' + p.id + '/spu');
+        const usd = spv.net_profit_incl_cost_usd;
+        const cny = spv.net_profit_incl_cost_cny;
+        const neg = Number(usd) < 0;
+        el.innerHTML = `<span class="${neg ? 'text-danger' : 'text-ok'}">$${usd} / ¥${cny}</span>`
+          + (spv.total_cost_usd ? ` <span class="muted small">（已扣成片成本 $${spv.total_cost_usd}）</span>` : '');
+      } catch { el.innerHTML = '<span class="muted small">—</span>'; }
+    }
+    loadNetIncl();
   }
 
   /* ---------------- 商品表单 ---------------- */

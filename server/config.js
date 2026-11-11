@@ -97,6 +97,27 @@ const LLM = {
 };
 if (LLM.apiKey && !/^https?:\/\//.test(LLM.baseUrl)) errors.push('LLM_BASE_URL 必须是 http(s) 地址');
 
+// ---- 成片工厂（可灵 / HeyGen）----
+// 无 API Key 时走「沙盒模式」：本地生成 taskId 并立即按秒记账，便于不接密钥也能跑通全链路与毛利核算。
+// 配置 KLING_API_KEY / HEYGEN_API_KEY 后自动切换真实 API（按公开文档对接，计费以你账户套餐为准）。
+const VIDEO = {
+  kling: {
+    apiKey: process.env.KLING_API_KEY || '',
+    baseUrl: (process.env.KLING_BASE_URL || 'https://api.klingai.com').replace(/\/+$/, ''),
+    model: process.env.KLING_MODEL || 'kling-v1-6',
+    perSecondUsd: num(process.env.KLING_PER_SECOND_USD, 0.05),
+    mode: process.env.KLING_MODE || 'std',
+    // 单次生成时长上限（秒），超过则自动拆成多段提交（Kling 公开版多为 5/10s 上限）
+    maxSeconds: int(process.env.KLING_MAX_SECONDS, 10)
+  },
+  heygen: {
+    apiKey: process.env.HEYGEN_API_KEY || '',
+    baseUrl: (process.env.HEYGEN_BASE_URL || 'https://api.heygen.com/v2').replace(/\/+$/, ''),
+    avatarId: process.env.HEYGEN_AVATAR_ID || '',
+    perSecondUsd: num(process.env.HEYGEN_PER_SECOND_USD, 0.04)
+  }
+};
+
 // ---- 任务调度 ----
 const REPORT_CRON_HOUR = int(process.env.REPORT_CRON_HOUR, 8);
 const REPORT_CRON_MINUTE = int(process.env.REPORT_CRON_MINUTE, 0);
@@ -107,6 +128,13 @@ const WRITE_REPORT_FILES = bool(process.env.REPORT_WRITE_FILES, true);
 
 // ---- 数据源 ----
 const DATA_PROVIDER = process.env.DATA_PROVIDER || 'manual';
+
+// ---- 跨域（供纯前端工具 profit / listing 通过 API Key 跨域回传数据）----
+// CORS_ALLOW_ORIGINS 为逗号分隔的允许来源（含 'null' 表示 file:// 打开的本地文件）；
+// CORS_ALLOW_ALL=1 放开全部来源（仅建议本地/内网使用）。默认仅同源。
+const CORS_ALLOW_ORIGINS = (process.env.CORS_ALLOW_ORIGINS || '')
+  .split(',').map((s) => s.trim()).filter(Boolean);
+const CORS_ALLOW_ALL = bool(process.env.CORS_ALLOW_ALL, false);
 
 const config = {
   env: NODE_ENV,
@@ -132,6 +160,9 @@ const config = {
   enableCron: ENABLE_CRON,
   writeReportFiles: WRITE_REPORT_FILES,
   dataProvider: DATA_PROVIDER,
+  video: VIDEO,
+  corsAllowOrigins: CORS_ALLOW_ORIGINS,
+  corsAllowAll: CORS_ALLOW_ALL,
   version: require('../package.json').version
 };
 

@@ -47,10 +47,35 @@ function normalize(p) {
   };
 }
 
+function jsonOr(v, fallback) {
+  if (v === null || v === undefined) return fallback;
+  if (typeof v !== 'string') return v;
+  try { return JSON.parse(v); } catch { return fallback; }
+}
+
 function decorate(p, cfg, series) {
   const stats = trendStatsFromSeries(series || [], today());
   const scored = computeScore(normalize(p), cfg, stats);
-  return { ...scored, series: (series || []).slice(-30) };
+  // SPU 打通层：material_refs / cost_ledger 在库中存为 JSON 文本，输出时解析为对象
+  const costLedger = jsonOr(p.cost_ledger, []);
+  const totalCostUsd = Math.round(
+    (Array.isArray(costLedger) ? costLedger : []).reduce((s, e) => s + (Number(e.cost_usd) || 0), 0) * 1e4
+  ) / 1e4;
+  const fx = Number(cfg && cfg.fx && cfg.fx.usdCny) || 7.2;
+  const baseNetUsd = Number(scored.profit && scored.profit.net_profit_usd) || 0;
+  const netInclUsd = Math.round((baseNetUsd - totalCostUsd) * 1e4) / 1e4;
+  const netInclCny = Math.round(netInclUsd * fx * 100) / 100;
+  return {
+    ...scored,
+    content_status: p.content_status || 'none',
+    material_refs: jsonOr(p.material_refs, []),
+    cost_ledger: costLedger,
+    // 成片/外采成本及其对净利的侵蚀（与详情页 SPU 视图口径一致）
+    total_cost_usd: totalCostUsd,
+    net_profit_incl_cost_usd: netInclUsd,
+    net_profit_incl_cost_cny: netInclCny,
+    series: (series || []).slice(-30)
+  };
 }
 
 function getRaw(tenantId, id) {
@@ -74,7 +99,10 @@ const SORTS = {
   competition: (a, b) => a.competition - b.competition,
   confidence: (a, b) => b.confidence - a.confidence,
   updated: (a, b) => String(b.updated_at).localeCompare(String(a.updated_at)),
-  name: (a, b) => String(a.name).localeCompare(String(b.name), 'zh-CN')
+  name: (a, b) => String(a.name).localeCompare(String(b.name), 'zh-CN'),
+  // 成片成本 / 含成片后净利（SPU 打通层新增）
+  cost: (a, b) => b.total_cost_usd - a.total_cost_usd,
+  netincl: (a, b) => b.net_profit_incl_cost_usd - a.net_profit_incl_cost_usd
 };
 
 function list(tenantId, query = {}) {
@@ -98,6 +126,10 @@ function list(tenantId, query = {}) {
 
   // 评分相关筛选在内存完成（分数是计算值）
   if (query.verdict && query.verdict !== 'all') items = items.filter((p) => p.verdict_key === query.verdict);
+  // 内容生产状态筛选（none/draft/reviewing/approved/delivered）
+  if (query.content_status && query.content_status !== 'all') {
+    items = items.filter((p) => (p.content_status || 'none') === query.content_status);
+  }
   if (query.minScore !== undefined && query.minScore !== null && query.minScore !== '') {
     items = items.filter((p) => p.scout_score >= Number(query.minScore));
   }
